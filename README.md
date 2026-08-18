@@ -35,7 +35,7 @@ RTSP Viewer Multicam es un visor local que consume streams RTSP de cámaras IP (
 
 Nació de una necesidad simple: ver la cámara de la entrada desde la oficina sin tener que sacar el teléfono y abrir la app de Tapo cada vez. Ahora el stream vive en una pestaña del navegador, siempre accesible, con latencia baja y sin depender de servicios en la nube.
 
-El servidor HTTP escucha únicamente en `127.0.0.1`, lo que lo hace seguro para uso en red local. Soporta hasta 4 cámaras simultáneas con dos vistas independientes (Site 1 y Site 2), pensadas para distribuirse en monitores separados.
+Soporta hasta 4 cámaras simultáneas con dos vistas independientes (Site 1 y Site 2), pensadas para distribuirse en monitores separados. Funciona en Windows, macOS y Linux, con o sin Docker.
 
 ## Características
 
@@ -45,9 +45,11 @@ El servidor HTTP escucha únicamente en `127.0.0.1`, lo que lo hace seguro para 
 - Página de configuración web protegida con password (`/config.html`)
 - Credenciales RTSP globales (default para todas las cámaras) con override individual por cámara
 - Conexión RTSP con fallback automático de TCP a UDP
+- Transcodificación con libx264 (elimina artefactos de frames corruptos)
 - Puerto dinámico: si 8765 está ocupado, busca 8766-8784
 - Limpieza automática de procesos FFmpeg al cerrar
-- API interna `/api/config` pública (solo nombres) y `/api/config/full` protegida
+- Configuración por terminal o por web, según prefieras
+- HLS.js local: funciona sin conexión a internet
 
 ## Estructura del proyecto
 
@@ -67,236 +69,106 @@ rtsp-viewer-multicam-v2/
 ├── hls.min.js                # HLS.js local (funciona sin internet)
 ├── Dockerfile
 ├── docker-compose.yml
-├── setup-mac-linux.sh
+│   # Windows
 ├── setup-windows.bat
-├── start-mac-linux.sh
 ├── start-windows.bat
-├── start-docker-windows.bat
-├── stop-mac-linux.sh
 ├── stop-windows.bat
-├── stop-docker-windows.bat
-├── install-autostart-windows-docker.ps1    # Autostart con Docker
-├── install-autostart-windows-nodocker.ps1  # Autostart con Python
-├── uninstall-autostart-windows.ps1         # Elimina el autostart
+├── start-docker-windows.bat  # (solo si usas Docker)
+├── stop-docker-windows.bat   # (solo si usas Docker)
+├── install-autostart-windows-docker.ps1
+├── install-autostart-windows-nodocker.ps1
+├── uninstall-autostart-windows.ps1
+│   # macOS / Linux
+├── setup-mac-linux.sh
+├── start-mac-linux.sh
+├── stop-mac-linux.sh
 └── README.md
 ```
 
-## Requisitos
+---
 
-- Python 3.8+
-- FFmpeg
+## Windows
 
-### Instalación de dependencias
+### Requisitos (sin Docker)
 
-**macOS:**
+No necesitas Docker ni WSL. Solo:
+
+1. [Python 3](https://www.python.org/downloads/) -- al instalar, marcar **"Add Python to PATH"**
+2. [FFmpeg](https://www.gyan.dev/ffmpeg/builds/) -- release full, extraer y agregar su carpeta `bin` al PATH
+
+Verificar:
+
+```cmd
+python --version
+ffmpeg -version
+```
+
+### Configuración inicial
+
+```cmd
+setup-windows.bat
+```
+
+El asistente por terminal pide: password de administrador, credenciales RTSP globales y las cámaras. Si ya existe configuración, reutiliza los valores actuales como defaults.
+
+Alternativa por web: iniciar el servidor (`start-windows.bat`), abrir `http://127.0.0.1:8765/config.html`, crear el password y agregar las cámaras.
+
+### Iniciar / Detener
+
+```cmd
+start-windows.bat    :: inicia y abre el navegador
+stop-windows.bat     :: detiene todo
+```
+
+### Arranque automático al iniciar sesión
+
+**Sin Docker (Python directo):**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File install-autostart-windows-nodocker.ps1
+```
+
+**Con Docker** (solo si ya lo tienes instalado):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File install-autostart-windows-docker.ps1
+```
+
+**Eliminar el arranque automático:**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File uninstall-autostart-windows.ps1
+```
+
+Alternativa manual: copiar un acceso directo de `start-windows.bat` a la carpeta `shell:startup` (Win+R).
+
+---
+
+## macOS
+
+### Requisitos
 
 ```bash
 brew install python3 ffmpeg
 ```
 
-**Debian / Ubuntu:**
-
-```bash
-sudo apt update && sudo apt install python3 ffmpeg
-```
-
-**Arch Linux:**
-
-```bash
-sudo pacman -S python ffmpeg
-```
-
-**Windows:**
-
-1. Instalar [Python 3](https://www.python.org/downloads/) marcando "Add Python to PATH"
-2. Descargar [FFmpeg](https://www.gyan.dev/ffmpeg/builds/) (release full) y agregar su carpeta `bin` al PATH
-
-## Docker (Proxmox / servidor)
-
-El proyecto incluye `Dockerfile` y `docker-compose.yml` para correrlo como contenedor. Ideal para Proxmox: el servidor escucha en `0.0.0.0` y la configuración se hace desde la web.
-
-```bash
-git clone https://github.com/marcogll/tapo_web_viewer.git
-cd tapo_web_viewer
-docker compose up -d --build
-```
-
-**En Windows** (además de los comandos anteriores) hay scripts dedicados:
-
-```cmd
-start-docker-windows.bat   :: levanta el contenedor
-stop-docker-windows.bat    :: lo detiene
-```
-
-Acceder desde cualquier dispositivo de la red:
-
-```text
-http://IP_DEL_SERVIDOR:8765/
-```
-
-En el primer arranque se crea una configuración vacía. Abrir `http://IP_DEL_SERVIDOR:8765/config.html`, crear el password de administrador y agregar las cámaras. Reiniciar el contenedor para aplicar:
-
-```bash
-docker compose restart
-```
-
-Los datos persisten en volúmenes:
-
-| Volumen | Contenido |
-|---|---|
-| `./config` | `cameras.json` con credenciales y layout |
-| `./hls` | Segmentos HLS temporales |
-
-Variables de entorno:
-
-| Variable | Default | Descripción |
-|---|---|---|
-| `RTSP_VIEWER_HOST` | `127.0.0.1` | Dirección de escucha. `0.0.0.0` para exponer en red local |
-| `RTSP_VIEWER_PORT` | `8765` | Puerto de escucha |
-| `RTSP_VIEWER_NONINTERACTIVE` | - | `1` para no abrir navegador ni pedir datos por terminal |
-
-## Configuración
-
-Hay dos formas de configurar: la **página web** (recomendada, funciona en cualquier sistema) o el **asistente por terminal**.
-
-### Configuración web (recomendada)
-
-1. Iniciar el servidor
-2. Abrir `http://127.0.0.1:8765/config.html` (o `http://IP_DEL_SERVIDOR:8765/config.html` en red local)
-3. En el primer acceso se pide crear el password de administrador
-4. Agregar las cámaras y configurar los sitios
-5. Reiniciar el servidor para aplicar
-
-### Asistente por terminal
-
-Ejecutar el asistente interactivo una sola vez:
-
-**macOS / Linux:**
+### Configuración inicial
 
 ```bash
 chmod +x setup-mac-linux.sh start-mac-linux.sh stop-mac-linux.sh
 ./setup-mac-linux.sh
 ```
 
-**Windows:**
-
-```cmd
-setup-windows.bat
-```
-
-El asistente solicita:
-
-1. **Password de configuración** -- protege la página web `/config.html`
-2. **Usuario RTSP global** -- default para todas las cámaras (opcional)
-3. **Contraseña RTSP global** -- default para todas las cámaras (opcional)
-4. Por cada cámara:
-
-| Campo | Ejemplo |
-|---|---|
-| Nombre | Recepción |
-| IP | 192.168.100.22 |
-| Usuario RTSP (vacío = global) | marcogll |
-| Contraseña RTSP (vacío = global) | ******** |
-| Puerto RTSP | 554 |
-| Ruta del stream | /stream1 |
-
-Si una cámara deja Usuario/Contraseña vacíos, usa las credenciales globales. Si la cámara tiene sus propios valores, estos tienen prioridad.
-
-Después se elige el layout y las cámaras asignadas a cada sitio.
-
-### Cámaras Tapo
-
-1. App Tapo > Settings > Advanced Settings > habilitar RTSP
-2. Crear cuenta RTSP local (usuario y contraseña)
-3. Obtener IP desde la app o el router
-4. Rutas comunes: `/stream1` (HD), `/stream2` (SD)
-
-Las credenciales se guardan en `config/cameras.json` con permisos `600` en macOS/Linux.
-
-## Uso
-
-### Iniciar
-
-**macOS / Linux:**
+### Iniciar / Detener
 
 ```bash
 ./start-mac-linux.sh
-```
-
-**Windows:**
-
-```cmd
-start-windows.bat
-```
-
-El navegador abre automáticamente:
-
-```text
-http://127.0.0.1:8765/site1.html
-http://127.0.0.1:8765/site2.html
-```
-
-### Compartir en la red local
-
-Si el servidor escucha en `0.0.0.0` (docker o `RTSP_VIEWER_HOST=0.0.0.0`), cualquier dispositivo de la red puede ver las cámaras. La página de inicio (`/`) muestra los enlaces:
-
-```text
-http://IP_DEL_SERVIDOR:8765/          # Página de inicio con enlaces
-http://IP_DEL_SERVIDOR:8765/site1.html
-http://IP_DEL_SERVIDOR:8765/site2.html
-```
-
-El servidor imprime las URLs compartibles al arrancar. En modo local, el primer arranque sin configuración abre directamente `/config.html` para hacer el setup por web.
-
-### Detener
-
-**macOS / Linux:**
-
-```bash
 ./stop-mac-linux.sh
 ```
 
-**Windows:**
+### Arranque automático (launchd)
 
-```cmd
-stop-windows.bat
-```
-
-### Picture-in-Picture
-
-Cada cámara tiene un botón **PiP** en la esquina inferior derecha. Al hacer click, el video se muestra en una ventana flotante que permanece encima de otras aplicaciones.
-
-Para PiP global del navegador, usar la extensión [Picture-in-Picture Extension (by Google)](https://chromewebstore.google.com/detail/picture-in-picture-extens/hkgfoiooedgoejojocmhlaklaeopbecg?hl=en):
-
-1. Instalar la extensión desde Chrome Web Store
-2. Abrir cualquier sitio del visor (`site1.html` o `site2.html`)
-3. Click derecho sobre el video > "Picture in picture" o usar el botón de la extensión
-
-La ventana flotante se mantiene encima de otras aplicaciones, ideal para vigilar la entrada sin cambiar de contexto.
-
-### Configuración web
-
-Acceder a `http://127.0.0.1:8765/config.html` o hacer click en el botón **Config** en la esquina superior derecha de cualquier sitio. La página pide el password configurado en el setup.
-
-Desde esta página se pueden:
-
-- Agregar, editar y eliminar cámaras
-- Configurar credenciales RTSP globales (usuario/contraseña default para todas las cámaras)
-- Sobrescribir credenciales por cámara (dejar vacíos para usar las globales)
-- Cambiar layouts de Site 1 y Site 2
-- Asignar cámaras a cada sitio
-
-Los cambios se guardan en `config/cameras.json`. Es necesario reiniciar el servidor para aplicar los cambios.
-
-### Reconfigurar
-
-Ejecutar nuevamente el script de setup correspondiente.
-
-## Instalación al arranque
-
-### macOS (launchd)
-
-Crear `~/Library/LaunchAgents/com.rtsp-viewer.plist`:
+Crear `~/Library/LaunchAgents/com.rtsp-viewer.plist` (ajustar rutas):
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -331,9 +203,47 @@ launchctl load ~/Library/LaunchAgents/com.rtsp-viewer.plist
 launchctl unload ~/Library/LaunchAgents/com.rtsp-viewer.plist
 ```
 
-### Linux (systemd)
+---
 
-Crear `/etc/systemd/system/rtsp-viewer.service`:
+## Linux
+
+### Requisitos
+
+**Debian / Ubuntu:**
+
+```bash
+sudo apt update && sudo apt install python3 ffmpeg
+```
+
+**Arch Linux:**
+
+```bash
+sudo pacman -S python ffmpeg
+```
+
+**Fedora:**
+
+```bash
+sudo dnf install python3 ffmpeg
+```
+
+### Configuración inicial
+
+```bash
+chmod +x setup-mac-linux.sh start-mac-linux.sh stop-mac-linux.sh
+./setup-mac-linux.sh
+```
+
+### Iniciar / Detener
+
+```bash
+./start-mac-linux.sh
+./stop-mac-linux.sh
+```
+
+### Arranque automático (systemd)
+
+Crear `/etc/systemd/system/rtsp-viewer.service` (ajustar rutas y usuario):
 
 ```ini
 [Unit]
@@ -356,8 +266,6 @@ WantedBy=multi-user.target
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl enable --now rtsp-viewer.service
-
-# Logs
 journalctl -u rtsp-viewer.service -f
 ```
 
@@ -389,37 +297,135 @@ systemctl --user enable --now rtsp-viewer.service
 loginctl enable-linger $USER
 ```
 
-### Windows (Task Scheduler)
+---
 
-Hay dos instaladores PowerShell listos para usar, dependiendo del modo de ejecución:
+## Docker (Proxmox / servidor)
 
-**Con Docker:**
+El proyecto incluye `Dockerfile` y `docker-compose.yml` para correrlo como contenedor. Ideal para Proxmox: el servidor escucha en `0.0.0.0` y la configuración se hace desde la web.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File install-autostart-windows-docker.ps1
+```bash
+git clone https://github.com/marcogll/tapo_web_viewer.git
+cd tapo_web_viewer
+docker compose up -d --build
 ```
 
-Arranca Docker Desktop y levanta el contenedor (`docker compose up -d`) al iniciar sesión. El contenedor ya trae `restart: unless-stopped`, así que se mantiene corriendo aunque el contenedor se detenga. Requiere Docker Desktop instalado.
+Acceder desde cualquier dispositivo de la red:
 
-**Sin Docker (Python directo):**
-
-```powershell
-powershell -ExecutionPolicy Bypass -File install-autostart-windows-nodocker.ps1
+```text
+http://IP_DEL_SERVIDOR:8765/
 ```
 
-Ejecuta `start-windows.bat` al iniciar sesión. Requiere Python 3 y FFmpeg en PATH.
+En el primer arranque se crea una configuración vacía. Abrir `http://IP_DEL_SERVIDOR:8765/config.html`, crear el password de administrador y agregar las cámaras. Reiniciar para aplicar:
 
-**Eliminar el arranque automático (ambos modos):**
-
-```powershell
-powershell -ExecutionPolicy Bypass -File uninstall-autostart-windows.ps1
+```bash
+docker compose restart
 ```
 
-Alternativa manual: copiar un acceso directo de `start-windows.bat` a `shell:startup` (Win+R).
+Los datos persisten en volúmenes:
+
+| Volumen | Contenido |
+|---|---|
+| `./config` | `cameras.json` con credenciales y layout |
+| `./hls` | Segmentos HLS temporales |
+
+Variables de entorno:
+
+| Variable | Default | Descripción |
+|---|---|---|
+| `RTSP_VIEWER_HOST` | `127.0.0.1` | Dirección de escucha. `0.0.0.0` para exponer en red local |
+| `RTSP_VIEWER_PORT` | `8765` | Puerto de escucha |
+| `RTSP_VIEWER_NONINTERACTIVE` | - | `1` para no abrir navegador ni pedir datos por terminal |
+
+---
+
+## Configuración de cámaras (común a todos los OS)
+
+Hay dos formas de configurar: la **página web** (recomendada) o el **asistente por terminal**.
+
+### Configuración web
+
+1. Iniciar el servidor (script de tu OS o docker)
+2. Abrir `http://127.0.0.1:8765/config.html` (o `http://IP_DEL_SERVIDOR:8765/config.html` en red local)
+3. En el primer acceso se pide crear el password de administrador
+4. Agregar las cámaras y configurar los sitios
+5. Reiniciar el servidor para aplicar
+
+### Asistente por terminal
+
+```cmd
+:: Windows
+setup-windows.bat
+```
+
+```bash
+# macOS / Linux
+./setup-mac-linux.sh
+```
+
+Solicita:
+
+1. **Password de configuración** -- protege la página web `/config.html`
+2. **Usuario RTSP global** -- default para todas las cámaras (opcional)
+3. **Contraseña RTSP global** -- default para todas las cámaras (opcional)
+4. Por cada cámara:
+
+| Campo | Ejemplo |
+|---|---|
+| Nombre | Recepción |
+| IP | 192.168.100.22 |
+| Usuario RTSP (vacío = global) | marcogll |
+| Contraseña RTSP (vacío = global) | ******** |
+| Puerto RTSP | 554 |
+| Ruta del stream | /stream1 |
+
+Si una cámara deja Usuario/Contraseña vacíos, usa las credenciales globales. Si la cámara tiene sus propios valores, estos tienen prioridad.
+
+### Cámaras Tapo
+
+1. App Tapo > Settings > Advanced Settings > habilitar RTSP
+2. Crear cuenta RTSP local (usuario y contraseña)
+3. Obtener IP desde la app o el router
+4. Rutas comunes: `/stream1` (HD), `/stream2` (SD)
+
+Las credenciales se guardan en `config/cameras.json` con permisos `600` en macOS/Linux.
+
+---
+
+## Uso del visor
+
+### Vistas
+
+```text
+http://127.0.0.1:8765/          # Página de inicio con enlaces
+http://127.0.0.1:8765/site1.html
+http://127.0.0.1:8765/site2.html
+```
+
+### Compartir en la red local
+
+Si el servidor escucha en `0.0.0.0` (docker o `RTSP_VIEWER_HOST=0.0.0.0`), cualquier dispositivo de la red puede ver las cámaras:
+
+```text
+http://IP_DEL_SERVIDOR:8765/
+```
+
+El servidor imprime las URLs compartibles al arrancar.
+
+### Picture-in-Picture
+
+Cada cámara tiene un botón **PiP** en la esquina inferior derecha. Al hacer click, el video se muestra en una ventana flotante que permanece encima de otras aplicaciones.
+
+Para PiP global del navegador, usar la extensión [Picture-in-Picture Extension (by Google)](https://chromewebstore.google.com/detail/picture-in-picture-extens/hkgfoiooedgoejojocmhlaklaeopbecg?hl=en):
+
+1. Instalar la extensión desde Chrome Web Store
+2. Abrir cualquier sitio del visor (`site1.html` o `site2.html`)
+3. Click derecho sobre el video > "Picture in picture" o usar el botón de la extensión
+
+---
 
 ## Seguridad
 
-- El servidor HTTP escucha solo en `127.0.0.1` (no accesible desde la red)
+- El servidor HTTP escucha solo en `127.0.0.1` por defecto (no accesible desde la red)
 - `config/cameras.json` tiene permisos `600` en macOS/Linux
 - La página de configuración y los endpoints de escritura requieren password
 - El password de administrador se guarda como hash SHA-256
@@ -434,22 +440,30 @@ Alternativa manual: copiar un acceso directo de `start-windows.bat` a `shell:sta
 lsof -nP -iTCP:8765 -sTCP:LISTEN
 # Linux
 ss -tlnp | grep 8765
-# Windows
+```
+
+```cmd
+:: Windows
 netstat -ano | findstr :8765
 ```
 
-**Camara no conecta** -- Verificar IP con `ping`, probar la URL RTSP en VLC (`rtsp://user:pass@IP:554/stream1`), confirmar que RTSP esta habilitado en la app Tapo.
+**Camara no conecta** -- Verificar IP con `ping`, probar la URL RTSP en VLC (`rtsp://user:pass@IP:554/stream1`), confirmar que RTSP esta habilitado en la app Tapo. Algunas Tapo solo aceptan 1-2 conexiones RTSP simultaneas: no dejes dos instancias del visor corriendo a la vez.
 
-**FFmpeg no encontrado** -- Verificar `ffmpeg -version`. Si no existe, instalar segun la seccion de dependencias.
+**FFmpeg no encontrado** -- Verificar `ffmpeg -version`. Si no existe, instalar segun la seccion de tu OS.
 
 **Video con delay** -- Ajustar `hls_time` en `server.py` (valor menor = menor latencia, mas CPU). Considerar stream SD (`/stream2`).
+
+**Raya verde en el video** -- Causada por frames corruptos al copiar el stream. El servidor transcodifica con libx264 por defecto, lo que la elimina. Si reaparece, reinicia el servidor.
 
 **Procesos colgados:**
 
 ```bash
 # macOS / Linux
 pkill -f "ffmpeg.*stream.m3u8"
-# Windows
+```
+
+```cmd
+:: Windows
 taskkill /F /IM ffmpeg.exe
 ```
 
