@@ -236,6 +236,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return token in sessions
 
     def do_GET(self):
+        if self.path in ("/sitio1.html", "/sitio2.html"):
+            self.send_response(301)
+            self.send_header("Location", self.path.replace("sitio", "site"))
+            self.end_headers()
+            return
         if self.path == "/api/config":
             cfg = load_config()
             safe = {
