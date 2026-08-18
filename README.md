@@ -60,9 +60,13 @@ rtsp-viewer-multicam-v2/
 ├── setup.py                  # Asistente interactivo de configuración
 ├── viewer.js                 # Reproductor HLS en navegador
 ├── style.css                 # Grid y estilos del visor
+├── index.html                # Página de inicio con enlaces
 ├── site1.html                # Vista Sitio 1
 ├── site2.html                # Vista Sitio 2
-├── config.html               # Página de configuración web
+├── config.html               # Página de configuración web (login + setup)
+├── hls.min.js                # HLS.js local (funciona sin internet)
+├── Dockerfile
+├── docker-compose.yml
 ├── setup-mac-linux.sh
 ├── setup-windows.bat
 ├── start-mac-linux.sh
@@ -102,7 +106,56 @@ sudo pacman -S python ffmpeg
 1. Instalar [Python 3](https://www.python.org/downloads/) marcando "Add Python to PATH"
 2. Descargar [FFmpeg](https://www.gyan.dev/ffmpeg/builds/) (release full) y agregar su carpeta `bin` al PATH
 
+## Docker (Proxmox / servidor)
+
+El proyecto incluye `Dockerfile` y `docker-compose.yml` para correrlo como contenedor. Ideal para Proxmox: el servidor escucha en `0.0.0.0` y la configuración se hace desde la web.
+
+```bash
+git clone https://github.com/marcogll/tapo_web_viewer.git
+cd tapo_web_viewer
+docker compose up -d --build
+```
+
+Acceder desde cualquier dispositivo de la red:
+
+```text
+http://IP_DEL_SERVIDOR:8765/
+```
+
+En el primer arranque se crea una configuración vacía. Abrir `http://IP_DEL_SERVIDOR:8765/config.html`, crear el password de administrador y agregar las cámaras. Reiniciar el contenedor para aplicar:
+
+```bash
+docker compose restart
+```
+
+Los datos persisten en volúmenes:
+
+| Volumen | Contenido |
+|---|---|
+| `./config` | `cameras.json` con credenciales y layout |
+| `./hls` | Segmentos HLS temporales |
+
+Variables de entorno:
+
+| Variable | Default | Descripción |
+|---|---|---|
+| `RTSP_VIEWER_HOST` | `127.0.0.1` | Dirección de escucha. `0.0.0.0` para exponer en red local |
+| `RTSP_VIEWER_PORT` | `8765` | Puerto de escucha |
+| `RTSP_VIEWER_NONINTERACTIVE` | - | `1` para no abrir navegador ni pedir datos por terminal |
+
 ## Configuración
+
+Hay dos formas de configurar: la **página web** (recomendada, funciona en cualquier sistema) o el **asistente por terminal**.
+
+### Configuración web (recomendada)
+
+1. Iniciar el servidor
+2. Abrir `http://127.0.0.1:8765/config.html` (o `http://IP_DEL_SERVIDOR:8765/config.html` en red local)
+3. En el primer acceso se pide crear el password de administrador
+4. Agregar las cámaras y configurar los sitios
+5. Reiniciar el servidor para aplicar
+
+### Asistente por terminal
 
 Ejecutar el asistente interactivo una sola vez:
 
@@ -170,6 +223,18 @@ El navegador abre automáticamente:
 http://127.0.0.1:8765/site1.html
 http://127.0.0.1:8765/site2.html
 ```
+
+### Compartir en la red local
+
+Si el servidor escucha en `0.0.0.0` (docker o `RTSP_VIEWER_HOST=0.0.0.0`), cualquier dispositivo de la red puede ver las cámaras. La página de inicio (`/`) muestra los enlaces:
+
+```text
+http://IP_DEL_SERVIDOR:8765/          # Página de inicio con enlaces
+http://IP_DEL_SERVIDOR:8765/site1.html
+http://IP_DEL_SERVIDOR:8765/site2.html
+```
+
+El servidor imprime las URLs compartibles al arrancar. En modo local, el primer arranque sin configuración abre directamente `/config.html` para hacer el setup por web.
 
 ### Detener
 

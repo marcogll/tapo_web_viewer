@@ -1,0 +1,15 @@
+config/cameras.json
+hls/
+__pycache__/
+*.pyc
+.git/
+.gitignore
+setup*.py
+setup-mac-linux.sh
+setup-windows.bat
+start-mac-linux.sh
+start-windows.bat
+stop-mac-linux.sh
+stop-windows.bat
+README.md
+docker-compose.yml

@@ -60,6 +60,21 @@ button.primary:hover{background:#3b7}
 <button class="logout" onclick="logout()">Salir</button>
 </h1>
 
+<div class="card" id="setup-password-card" style="display:none;border:2px solid #2a6">
+<h2>Crear password de administrador</h2>
+<p class="hint">Configura el password que protegerá esta página. Se pedirá en futuros accesos.</p>
+<div class="row">
+<div>
+<label>Nuevo password</label>
+<input type="password" id="new-password">
+</div>
+<div>
+<label>Confirmar password</label>
+<input type="password" id="confirm-password">
+</div>
+</div>
+</div>
+
 <div class="card">
 <h2>Credenciales RTSP globales</h2>
 <p class="hint">Se aplican a todas las cámaras. Se pueden sobrescribir por cámara dejando esos campos con valores.</p>
@@ -296,6 +311,16 @@ function esc(s) {
 async function saveConfig() {
   config.global_user = document.getElementById('global-user').value;
   config.global_password = document.getElementById('global-password').value;
+
+  const pwCard = document.getElementById('setup-password-card');
+  if (pwCard.style.display !== 'none') {
+    const np = document.getElementById('new-password').value;
+    const cp = document.getElementById('confirm-password').value;
+    if (!np) { showStatus('Escribe un password de administrador', 'error'); return; }
+    if (np !== cp) { showStatus('Los passwords no coinciden', 'error'); return; }
+    config.new_password = np;
+  }
+
   try {
     const res = await fetch('/api/config', {
       method: 'POST',
@@ -304,6 +329,7 @@ async function saveConfig() {
     });
     if (res.ok) {
       showStatus('Configuración guardada. Reinicia el servidor para aplicar cambios.', 'success');
+      window.setTimeout(() => { localStorage.removeItem('rtsp_token'); location.reload(); }, 2500);
     } else {
       showStatus('Error al guardar configuración', 'error');
     }
@@ -325,6 +351,9 @@ function showStatus(msg, type) {
     const data = await res.json();
     if (data.authed) {
       showMain();
+      if (!data.has_password) {
+        document.getElementById('setup-password-card').style.display = 'block';
+      }
       loadConfig();
     } else {
       showLogin();

@@ -5,6 +5,7 @@ import json
 import os
 import secrets
 import signal
+import socket
 import socketserver
 import subprocess
 import sys
@@ -39,7 +40,17 @@ def hash_password(pw):
 
 def first_run_setup():
     print("\n=== Configuración inicial RTSP Viewer ===\n")
-    admin_pw = prompt("Password para acceder a la configuración web", secret=True)
+    print("No se encontró config/cameras.json.")
+    print("Configura las cámaras desde la página web de configuración.")
+    if os.environ.get("RTSP_VIEWER_HOST", "127.0.0.1") != "127.0.0.1" or os.environ.get("RTSP_VIEWER_NONINTERACTIVE"):
+        default_config()
+        return
+    try:
+        admin_pw = prompt("Password para acceder a la configuración web", secret=True)
+    except EOFError:
+        print("Sin terminal interactiva. Se crea configuración vacía, configúrala desde la web.")
+        default_config()
+        return
     if not admin_pw:
         print("ERROR: el password no puede estar vacío.")
         sys.exit(1)
@@ -86,6 +97,24 @@ def first_run_setup():
     except Exception:
         pass
     print(f"\nConfiguración guardada en: {CONFIG_FILE}\n")
+
+def default_config():
+    config = {
+        "port": PORT,
+        "admin_password_hash": "",
+        "global_user": "",
+        "global_password": "",
+        "cameras": [],
+        "site1": {"layout": "1x1", "cameras": []},
+        "site2": {"layout": "1x1", "cameras": []}
+    }
+    CONFIG_FILE.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
+    try:
+        os.chmod(CONFIG_FILE, 0o600)
+    except Exception:
+        pass
+    print(f"\nConfiguración vacía creada en: {CONFIG_FILE}")
+    print("Abre la página de configuración para agregar cámaras.\n")
 
 def load_config():
     if not CONFIG_FILE.exists():
@@ -200,6 +229,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(data)
 
     def _is_authed(self):
+        cfg = load_config()
+        if not cfg.get("admin_password_hash"):
+            return True
         token = self.headers.get("X-Auth-Token", "")
         return token in sessions
 
@@ -223,7 +255,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self._send_json(200, cfg)
             return
         if self.path == "/api/auth/check":
-            self._send_json(200, {"authed": self._is_authed()})
+            cfg = load_config()
+            self._send_json(200, {
+                "authed": self._is_authed(),
+                "has_password": bool(cfg.get("admin_password_hash"))
+            })
             return
         return super().do_GET()
 
@@ -252,6 +288,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 new_cfg = json.loads(body.decode("utf-8"))
                 old_cfg = load_config()
                 new_cfg["admin_password_hash"] = old_cfg.get("admin_password_hash", "")
+                if new_cfg.get("new_password"):
+                    new_cfg["admin_password_hash"] = hash_password(new_cfg.pop("new_password"))
                 CONFIG_FILE.write_text(json.dumps(new_cfg, ensure_ascii=False, indent=2), encoding="utf-8")
                 try:
                     os.chmod(CONFIG_FILE, 0o600)
@@ -273,33 +311,57 @@ def stop_all(*_):
         except Exception: pass
 
 config = load_config()
-PORT = int(config.get("port", PORT))
+PORT = int(os.environ.get("RTSP_VIEWER_PORT", config.get("port", PORT)))
+HOST = os.environ.get("RTSP_VIEWER_HOST", "127.0.0.1")
+NONINTERACTIVE = os.environ.get("RTSP_VIEWER_NONINTERACTIVE") == "1"
 
 os.chdir(BASE)
 
 class ReusableTCPServer(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
+    daemon_threads = True
 
-def bind_server(preferred_port):
+def bind_server(host, preferred_port):
     # Prefer the configured port, but automatically move upward if an old
     # instance or another app is still using it.
     for candidate in range(preferred_port, preferred_port + 20):
         try:
-            return ReusableTCPServer(("127.0.0.1", candidate), Handler), candidate
+            return ReusableTCPServer((host, candidate), Handler), candidate
         except OSError as e:
             if getattr(e, "errno", None) in (48, 98, 10048):
                 continue
             raise
-    raise OSError(f"No hay un puerto disponible entre {preferred_port} y {preferred_port + 19}")
+    raise OSError(f"No hay un puerto disponible entre {preferred_port} and {preferred_port + 19}")
 
-httpd, PORT = bind_server(PORT)
+httpd, PORT = bind_server(HOST, PORT)
 start_ffmpeg(config)
 
 signal.signal(signal.SIGINT, stop_all)
 if hasattr(signal, "SIGTERM"):
     signal.signal(signal.SIGTERM, stop_all)
 
+def local_ips():
+    ips = []
+    try:
+        for ip in socket.gethostbyname_ex(socket.gethostname())[2]:
+            if not ip.startswith("127."):
+                ips.append(ip)
+    except Exception:
+        pass
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ips.append(s.getsockname()[0])
+        s.close()
+    except Exception:
+        pass
+    return list(dict.fromkeys(ips))
+
 def open_pages():
+    needs_setup = not config.get("cameras") or not config.get("admin_password_hash")
+    if needs_setup:
+        webbrowser.open(f"http://127.0.0.1:{PORT}/config.html")
+        return
     for _ in range(40):
         if any(HLS_ROOT.glob("cam*/stream.m3u8")):
             break
@@ -308,11 +370,15 @@ def open_pages():
     time.sleep(.5)
     webbrowser.open(f"http://127.0.0.1:{PORT}/site2.html")
 
-threading.Thread(target=open_pages, daemon=True).start()
+if not NONINTERACTIVE and HOST in ("127.0.0.1", "localhost"):
+    threading.Thread(target=open_pages, daemon=True).start()
 
+print(f"Servidor escuchando en {HOST}:{PORT}")
 print(f"Site 1: http://127.0.0.1:{PORT}/site1.html")
 print(f"Site 2: http://127.0.0.1:{PORT}/site2.html")
-print(f"Configurar de nuevo: python3 setup.py")
+print(f"Config:  http://127.0.0.1:{PORT}/config.html")
+for ip in local_ips():
+    print(f"Compartir (red local): http://{ip}:{PORT}/")
 print("Ctrl+C para cerrar.")
 
 try:

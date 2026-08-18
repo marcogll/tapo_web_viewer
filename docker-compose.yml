@@ -1,0 +1,14 @@
+services:
+  rtsp-viewer:
+    build: .
+    container_name: rtsp-viewer
+    restart: unless-stopped
+    ports:
+      - "8765:8765"
+    environment:
+      - RTSP_VIEWER_HOST=0.0.0.0
+      - RTSP_VIEWER_NONINTERACTIVE=1
+      - RTSP_VIEWER_PORT=8765
+    volumes:
+      - ./config:/app/config
+      - ./hls:/app/hls
