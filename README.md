@@ -91,17 +91,28 @@ rtsp-viewer-multicam-v2/
 
 ### Requisitos (sin Docker)
 
-No necesitas Docker ni WSL. Solo:
+No necesitas Docker ni WSL. Solo Python 3 y FFmpeg.
 
-1. [Python 3](https://www.python.org/downloads/) -- al instalar, marcar **"Add Python to PATH"**
-2. [FFmpeg](https://www.gyan.dev/ffmpeg/builds/) -- release full, extraer y agregar su carpeta `bin` al PATH
+**Con winget** (Windows 10/11, recomendado):
 
-Verificar:
+```cmd
+winget install Python.Python.3.12
+winget install Gyan.FFmpeg
+```
+
+Al terminar, cerrar y reabrir la terminal para que tome el PATH. Verificar:
 
 ```cmd
 python --version
 ffmpeg -version
 ```
+
+**Sin winget (manual):**
+
+1. [Python 3](https://www.python.org/downloads/) -- al instalar, marcar **"Add Python to PATH"**
+2. [FFmpeg](https://www.gyan.dev/ffmpeg/builds/) -- release full, extraer y agregar su carpeta `bin` al PATH
+
+> Nota: si `ffmpeg` no aparece en PATH tras instalar con winget, cerrar y reabrir la terminal, o reiniciar el equipo.
 
 ### Configuración inicial
 
