@@ -33,6 +33,8 @@
 
 RTSP Viewer Multicam es un visor local que consume streams RTSP de cámaras IP (Tapo, Hikvision, Dahua, etc.), los transcodifica a HLS mediante FFmpeg y los sirve en el navegador sin necesidad de usar la app del fabricante.
 
+Nació de una necesidad simple: ver la cámara de la entrada desde la oficina sin tener que sacar el teléfono y abrir la app de Tapo cada vez. Ahora el stream vive en una pestaña del navegador, siempre accesible, con latencia baja y sin depender de servicios en la nube.
+
 El servidor HTTP escucha únicamente en `127.0.0.1`, lo que lo hace seguro para uso en red local. Soporta hasta 4 cámaras simultáneas con dos vistas independientes (Site 1 y Site 2), pensadas para distribuirse en monitores separados.
 
 ## Características
