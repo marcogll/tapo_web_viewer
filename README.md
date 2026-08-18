@@ -42,11 +42,12 @@ El servidor HTTP escucha únicamente en `127.0.0.1`, lo que lo hace seguro para 
 - Hasta 4 cámaras simultáneas con layouts 1x1, 1x2 o 2x2
 - Dos vistas independientes para multi-monitor
 - Botón Picture-in-Picture individual por cámara
-- Página de configuración web (`/config.html`) para editar cámaras sin CLI
+- Página de configuración web protegida con password (`/config.html`)
+- Credenciales RTSP globales (default para todas las cámaras) con override individual por cámara
 - Conexión RTSP con fallback automático de TCP a UDP
 - Puerto dinámico: si 8765 está ocupado, busca 8766-8784
 - Limpieza automática de procesos FFmpeg al cerrar
-- API interna `/api/config` para lectura y escritura de configuración
+- API interna `/api/config` pública (solo nombres) y `/api/config/full` protegida
 
 ## Estructura del proyecto
 
@@ -118,16 +119,23 @@ chmod +x setup-mac-linux.sh start-mac-linux.sh stop-mac-linux.sh
 setup-windows.bat
 ```
 
-El asistente solicita por cada cámara:
+El asistente solicita:
+
+1. **Password de configuración** -- protege la página web `/config.html`
+2. **Usuario RTSP global** -- default para todas las cámaras (opcional)
+3. **Contraseña RTSP global** -- default para todas las cámaras (opcional)
+4. Por cada cámara:
 
 | Campo | Ejemplo |
 |---|---|
 | Nombre | Recepción |
 | IP | 192.168.100.22 |
-| Usuario RTSP | marcogll |
-| Contraseña RTSP | ******** |
+| Usuario RTSP (vacío = global) | marcogll |
+| Contraseña RTSP (vacío = global) | ******** |
 | Puerto RTSP | 554 |
 | Ruta del stream | /stream1 |
+
+Si una cámara deja Usuario/Contraseña vacíos, usa las credenciales globales. Si la cámara tiene sus propios valores, estos tienen prioridad.
 
 Después se elige el layout y las cámaras asignadas a cada sitio.
 
@@ -191,11 +199,13 @@ La ventana flotante se mantiene encima de otras aplicaciones, ideal para vigilar
 
 ### Configuración web
 
-Acceder a `http://127.0.0.1:8765/config.html` o hacer click en el botón **Config** en la esquina superior derecha de cualquier sitio.
+Acceder a `http://127.0.0.1:8765/config.html` o hacer click en el botón **Config** en la esquina superior derecha de cualquier sitio. La página pide el password configurado en el setup.
 
 Desde esta página se pueden:
 
 - Agregar, editar y eliminar cámaras
+- Configurar credenciales RTSP globales (usuario/contraseña default para todas las cámaras)
+- Sobrescribir credenciales por cámara (dejar vacíos para usar las globales)
 - Cambiar layouts de Site 1 y Site 2
 - Asignar cámaras a cada sitio
 
@@ -327,7 +337,9 @@ Alternativa simple: copiar un acceso directo de `start-windows.bat` a `shell:sta
 
 - El servidor HTTP escucha solo en `127.0.0.1` (no accesible desde la red)
 - `config/cameras.json` tiene permisos `600` en macOS/Linux
-- La API `/api/config` nunca expone contraseñas al navegador
+- La página de configuración y los endpoints de escritura requieren password
+- El password de administrador se guarda como hash SHA-256
+- La API pública `/api/config` solo expone nombres de cámaras y layouts, nunca credenciales
 
 ## Troubleshooting
 

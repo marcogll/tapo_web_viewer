@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
+import hashlib
 import http.server
 import json
 import os
+import secrets
 import signal
 import socketserver
 import subprocess
@@ -18,6 +20,7 @@ CONFIG_FILE = CONFIG_DIR / "cameras.json"
 HLS_ROOT = BASE / "hls"
 PORT = 8765
 processes = []
+sessions = set()
 
 CONFIG_DIR.mkdir(exist_ok=True)
 HLS_ROOT.mkdir(exist_ok=True)
@@ -31,14 +34,25 @@ def prompt(text, default=None, secret=False):
         value = input(f"{text}{suffix}: ").strip()
     return value or (default or "")
 
+def hash_password(pw):
+    return hashlib.sha256(pw.encode("utf-8")).hexdigest()
+
 def first_run_setup():
     print("\n=== Configuración inicial RTSP Viewer ===\n")
+    admin_pw = prompt("Password para acceder a la configuración web", secret=True)
+    if not admin_pw:
+        print("ERROR: el password no puede estar vacío.")
+        sys.exit(1)
+
+    global_user = prompt("Usuario RTSP global (default para todas las cámaras)", "")
+    global_password = prompt("Contraseña RTSP global (default para todas las cámaras)", "", secret=True)
+
     cams = []
     while True:
         name = prompt("Nombre de la cámara", f"Camara {len(cams)+1}")
         ip = prompt("IP de la cámara")
-        user = prompt("Usuario RTSP")
-        password = prompt("Contraseña RTSP", secret=True)
+        user = prompt(f"Usuario RTSP (vacío = global '{global_user}')", "")
+        password = prompt("Contraseña RTSP (vacío = global)", "", secret=True)
         port = prompt("Puerto RTSP", "554")
         stream = prompt("Ruta del stream", "/stream1")
         if not stream.startswith("/"):
@@ -59,6 +73,9 @@ def first_run_setup():
 
     config = {
         "port": PORT,
+        "admin_password_hash": hash_password(admin_pw),
+        "global_user": global_user,
+        "global_password": global_password,
         "cameras": cams,
         "site1": {"layout": "2x2", "cameras": list(range(min(4, len(cams))))},
         "site2": {"layout": "1x1", "cameras": [0] if cams else []}
@@ -73,11 +90,17 @@ def first_run_setup():
 def load_config():
     if not CONFIG_FILE.exists():
         first_run_setup()
-    return json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+    cfg = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+    cfg.setdefault("admin_password_hash", "")
+    cfg.setdefault("global_user", "")
+    cfg.setdefault("global_password", "")
+    return cfg
 
-def camera_url(cam):
-    user = urllib.parse.quote(cam["user"], safe="")
-    password = urllib.parse.quote(cam["password"], safe="")
+def camera_url(cam, cfg):
+    user = cam.get("user") or cfg.get("global_user", "")
+    password = cam.get("password") or cfg.get("global_password", "")
+    user = urllib.parse.quote(user, safe="")
+    password = urllib.parse.quote(password, safe="")
     host = cam["ip"]
     port = cam.get("port", 554)
     stream = cam.get("stream", "/stream1")
@@ -106,7 +129,7 @@ def spawn_ffmpeg(idx, cam, transport):
         "-fflags", "+genpts+discardcorrupt",
         "-use_wallclock_as_timestamps", "1",
         "-rtsp_transport", transport,
-        "-i", camera_url(cam),
+        "-i", camera_url(cam, config),
         "-map", "0:v:0",
         "-an",
         "-c:v", "copy",
@@ -168,34 +191,75 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
 
+    def _send_json(self, code, obj):
+        data = json.dumps(obj).encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _is_authed(self):
+        token = self.headers.get("X-Auth-Token", "")
+        return token in sessions
+
     def do_GET(self):
         if self.path == "/api/config":
             cfg = load_config()
-            data = json.dumps(cfg).encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(data)))
-            self.end_headers()
-            self.wfile.write(data)
+            safe = {
+                "cameras": [{"name": c["name"]} for c in cfg.get("cameras", [])],
+                "site1": cfg.get("site1", {}),
+                "site2": cfg.get("site2", {}),
+                "port": cfg.get("port", PORT)
+            }
+            self._send_json(200, safe)
+            return
+        if self.path == "/api/config/full":
+            if not self._is_authed():
+                self._send_json(401, {"error": "No autorizado"})
+                return
+            cfg = load_config()
+            cfg.pop("admin_password_hash", None)
+            self._send_json(200, cfg)
+            return
+        if self.path == "/api/auth/check":
+            self._send_json(200, {"authed": self._is_authed()})
             return
         return super().do_GET()
 
     def do_POST(self):
+        if self.path == "/api/login":
+            try:
+                length = int(self.headers.get("Content-Length", 0))
+                body = json.loads(self.rfile.read(length).decode("utf-8"))
+                cfg = load_config()
+                if hash_password(body.get("password", "")) == cfg.get("admin_password_hash", ""):
+                    token = secrets.token_hex(16)
+                    sessions.add(token)
+                    self._send_json(200, {"token": token})
+                else:
+                    self._send_json(401, {"error": "Password incorrecto"})
+            except Exception:
+                self._send_json(500, {"error": "Error de login"})
+            return
         if self.path == "/api/config":
+            if not self._is_authed():
+                self._send_json(401, {"error": "No autorizado"})
+                return
             try:
                 length = int(self.headers.get("Content-Length", 0))
                 body = self.rfile.read(length)
                 new_cfg = json.loads(body.decode("utf-8"))
+                old_cfg = load_config()
+                new_cfg["admin_password_hash"] = old_cfg.get("admin_password_hash", "")
                 CONFIG_FILE.write_text(json.dumps(new_cfg, ensure_ascii=False, indent=2), encoding="utf-8")
                 try:
                     os.chmod(CONFIG_FILE, 0o600)
                 except Exception:
                     pass
-                self.send_response(200)
-                self.end_headers()
-            except Exception as e:
-                self.send_response(500)
-                self.end_headers()
+                self._send_json(200, {"ok": True})
+            except Exception:
+                self._send_json(500, {"error": "Error al guardar"})
             return
         return super().do_POST()
 

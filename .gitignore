@@ -1,2 +1,5 @@
 config/cameras.json
 hls/
+
+__pycache__/
+*.pyc

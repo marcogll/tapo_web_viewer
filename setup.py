@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import hashlib
 import json
 import os
 import getpass
@@ -15,6 +16,9 @@ def ask(text, default=None, secret=False):
     else:
         value = input(f"{text}{suffix}: ").strip()
     return value or (default or "")
+
+def hash_password(pw):
+    return hashlib.sha256(pw.encode("utf-8")).hexdigest()
 
 def choose_layout(label, default):
     value = ask(f"Layout para {label}: 1x1, 1x2 o 2x2", default).lower()
@@ -42,14 +46,22 @@ def choose_cameras(label, cams, layout):
     return selected[:maxn]
 
 CONFIG_DIR.mkdir(exist_ok=True)
-cams = []
 print("\n=== Configuración de cámaras ===\n")
 
+admin_pw = ask("Password para la página de configuración web", secret=True)
+if not admin_pw:
+    print("ERROR: el password no puede estar vacío.")
+    raise SystemExit(1)
+
+global_user = ask("Usuario RTSP global (default para todas las cámaras)", "")
+global_password = ask("Contraseña RTSP global (default para todas las cámaras)", "", secret=True)
+
+cams = []
 while True:
     name = ask("Nombre de la cámara", f"Camara {len(cams)+1}")
     ip = ask("IP")
-    user = ask("Usuario RTSP")
-    password = ask("Contraseña RTSP", secret=True)
+    user = ask(f"Usuario RTSP (vacío = global '{global_user}')", "")
+    password = ask(f"Contraseña RTSP (vacío = global)", "", secret=True)
     port = int(ask("Puerto RTSP", "554"))
     stream = ask("Ruta del stream", "/stream1")
     if not stream.startswith("/"):
@@ -78,6 +90,9 @@ site2_cams = choose_cameras("Sitio 2", cams, site2_layout)
 
 config = {
     "port": 8765,
+    "admin_password_hash": hash_password(admin_pw),
+    "global_user": global_user,
+    "global_password": global_password,
     "cameras": cams,
     "site1": {"layout": site1_layout, "cameras": site1_cams},
     "site2": {"layout": site2_layout, "cameras": site2_cams}

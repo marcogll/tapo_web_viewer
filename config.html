@@ -21,7 +21,7 @@ input:focus,select:focus{outline:none;border-color:#666}
 .row>*{flex:1}
 button{padding:10px 20px;background:#4a4a4a;border:none;color:#fff;border-radius:4px;cursor:pointer;font-size:14px;margin-top:10px}
 button:hover{background:#5a5a5a}
-button.primary{background:#2a6;background:#2a6}
+button.primary{background:#2a6}
 button.primary:hover{background:#3b7}
 .layout-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px}
 .layout-option{padding:15px;background:#1a1a1a;border:2px solid transparent;border-radius:6px;cursor:pointer;text-align:center}
@@ -35,14 +35,49 @@ button.primary:hover{background:#3b7}
 .status{padding:10px;border-radius:4px;margin-top:10px;display:none}
 .status.success{background:#2a6;display:block}
 .status.error{background:#d33;display:block}
+.hint{font-size:12px;color:#888;margin-top:4px}
+#login-screen{max-width:400px;margin:10vh auto;text-align:center}
+#login-screen .card{padding:30px}
+#login-screen input{text-align:center}
+.hidden{display:none!important}
+.logout{float:right;background:transparent;border:1px solid #555;padding:6px 12px;font-size:12px}
 </style>
 </head>
 <body>
 <div class="container">
-<h1>Configuración RTSP Viewer</h1>
+<div id="login-screen">
+<div class="card">
+<h1>RTSP Viewer</h1>
+<p style="color:#aaa;margin-bottom:15px">Acceso a configuración</p>
+<input type="password" id="login-password" placeholder="Password" onkeydown="if(event.key==='Enter')doLogin()">
+<button class="primary" style="width:100%" onclick="doLogin()">Entrar</button>
+<div class="status" id="login-status"></div>
+</div>
+</div>
+
+<div id="main-screen" class="hidden">
+<h1>Configuración RTSP Viewer
+<button class="logout" onclick="logout()">Salir</button>
+</h1>
+
+<div class="card">
+<h2>Credenciales RTSP globales</h2>
+<p class="hint">Se aplican a todas las cámaras. Se pueden sobrescribir por cámara dejando esos campos con valores.</p>
+<div class="row">
+<div>
+<label>Usuario global</label>
+<input type="text" id="global-user" placeholder="ej. marcogll">
+</div>
+<div>
+<label>Contraseña global</label>
+<input type="password" id="global-password" placeholder="••••••••">
+</div>
+</div>
+</div>
 
 <div class="card">
 <h2>Cámaras</h2>
+<p class="hint">Deja Usuario/Contraseña vacíos en una cámara para usar las credenciales globales.</p>
 <div id="cameras"></div>
 <button onclick="addCamera()">+ Agregar cámara</button>
 </div>
@@ -90,17 +125,64 @@ button.primary:hover{background:#3b7}
 
 <div class="status" id="status"></div>
 </div>
+</div>
 
 <script>
 let config = {cameras:[], site1:{layout:'1x1',cameras:[]}, site2:{layout:'1x1',cameras:[]}, port:8765};
+let token = localStorage.getItem('rtsp_token') || '';
+
+function showLogin() {
+  document.getElementById('login-screen').classList.remove('hidden');
+  document.getElementById('main-screen').classList.add('hidden');
+}
+
+function showMain() {
+  document.getElementById('login-screen').classList.add('hidden');
+  document.getElementById('main-screen').classList.remove('hidden');
+}
+
+async function doLogin() {
+  const statusEl = document.getElementById('login-status');
+  statusEl.className = 'status';
+  try {
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({password: document.getElementById('login-password').value})
+    });
+    const data = await res.json();
+    if (res.ok) {
+      token = data.token;
+      localStorage.setItem('rtsp_token', token);
+      showMain();
+      loadConfig();
+    } else {
+      statusEl.textContent = data.error || 'Password incorrecto';
+      statusEl.className = 'status error';
+    }
+  } catch (err) {
+    statusEl.textContent = 'Error de conexión';
+    statusEl.className = 'status error';
+  }
+}
+
+function logout() {
+  token = '';
+  localStorage.removeItem('rtsp_token');
+  showLogin();
+}
 
 async function loadConfig() {
   try {
-    const res = await fetch('/api/config');
+    const res = await fetch('/api/config/full', {headers: {'X-Auth-Token': token}});
+    if (res.status === 401) { showLogin(); return; }
     const data = await res.json();
     config.cameras = data.cameras || [];
     config.site1 = data.site1 || {layout:'1x1',cameras:[]};
     config.site2 = data.site2 || {layout:'1x1',cameras:[]};
+    config.port = data.port || 8765;
+    document.getElementById('global-user').value = data.global_user || '';
+    document.getElementById('global-password').value = data.global_password || '';
     renderCameras();
     renderSites();
   } catch (err) {
@@ -119,21 +201,21 @@ function renderCameras() {
       <div class="row">
         <div>
           <label>Nombre</label>
-          <input type="text" value="${cam.name||''}" onchange="updateCamera(${idx},'name',this.value)">
+          <input type="text" value="${esc(cam.name||'')}" onchange="updateCamera(${idx},'name',this.value)">
         </div>
         <div>
           <label>IP</label>
-          <input type="text" value="${cam.ip||''}" onchange="updateCamera(${idx},'ip',this.value)">
+          <input type="text" value="${esc(cam.ip||'')}" onchange="updateCamera(${idx},'ip',this.value)">
         </div>
       </div>
       <div class="row">
         <div>
-          <label>Usuario RTSP</label>
-          <input type="text" value="${cam.user||''}" onchange="updateCamera(${idx},'user',this.value)">
+          <label>Usuario RTSP (vacío = global)</label>
+          <input type="text" value="${esc(cam.user||'')}" onchange="updateCamera(${idx},'user',this.value)">
         </div>
         <div>
-          <label>Contraseña RTSP</label>
-          <input type="password" value="${cam.password||''}" onchange="updateCamera(${idx},'password',this.value)">
+          <label>Contraseña RTSP (vacío = global)</label>
+          <input type="password" value="${esc(cam.password||'')}" onchange="updateCamera(${idx},'password',this.value)">
         </div>
       </div>
       <div class="row">
@@ -143,7 +225,7 @@ function renderCameras() {
         </div>
         <div>
           <label>Ruta del stream</label>
-          <input type="text" value="${cam.stream||'/stream1'}" onchange="updateCamera(${idx},'stream',this.value)">
+          <input type="text" value="${esc(cam.stream||'/stream1')}" onchange="updateCamera(${idx},'stream',this.value)">
         </div>
       </div>
     `;
@@ -169,7 +251,7 @@ function renderSiteCameras() {
     config.cameras.forEach((cam, idx) => {
       const label = document.createElement('label');
       const checked = config[site].cameras.includes(idx) ? 'checked' : '';
-      label.innerHTML = `<input type="checkbox" ${checked} onchange="toggleSiteCamera('${site}',${idx},this.checked)"> ${cam.name||'Camara '+(idx+1)}`;
+      label.innerHTML = `<input type="checkbox" ${checked} onchange="toggleSiteCamera('${site}',${idx},this.checked)"> ${esc(cam.name||'Camara '+(idx+1))}`;
       container.appendChild(label);
     });
   });
@@ -207,11 +289,17 @@ function toggleSiteCamera(site, idx, checked) {
   }
 }
 
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
 async function saveConfig() {
+  config.global_user = document.getElementById('global-user').value;
+  config.global_password = document.getElementById('global-password').value;
   try {
     const res = await fetch('/api/config', {
       method: 'POST',
-      headers: {'Content-Type':'application/json'},
+      headers: {'Content-Type':'application/json', 'X-Auth-Token': token},
       body: JSON.stringify(config)
     });
     if (res.ok) {
@@ -231,7 +319,20 @@ function showStatus(msg, type) {
   setTimeout(() => el.className = 'status', 5000);
 }
 
-loadConfig();
+(async () => {
+  try {
+    const res = await fetch('/api/auth/check', {headers: {'X-Auth-Token': token}});
+    const data = await res.json();
+    if (data.authed) {
+      showMain();
+      loadConfig();
+    } else {
+      showLogin();
+    }
+  } catch (err) {
+    showLogin();
+  }
+})();
 </script>
 </body>
 </html>
