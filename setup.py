@@ -46,27 +46,63 @@ def choose_cameras(label, cams, layout):
     return selected[:maxn]
 
 CONFIG_DIR.mkdir(exist_ok=True)
+
+old = None
+if CONFIG_FILE.exists():
+    try:
+        old = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        old = None
+
 print("\n=== Configuración de cámaras ===\n")
 
-admin_pw = ask("Password para la página de configuración web", secret=True)
-if not admin_pw:
-    print("ERROR: el password no puede estar vacío.")
-    raise SystemExit(1)
+# Password de configuración web: se conserva si ya existe
+if old and old.get("admin_password_hash"):
+    change_pw = ask("¿Cambiar el password de la página de configuración? (s/n)", "n").lower()
+    if change_pw in ("s","si","sí","y","yes"):
+        admin_pw = ask("Nuevo password", secret=True)
+        if not admin_pw:
+            print("ERROR: el password no puede estar vacío.")
+            raise SystemExit(1)
+        admin_hash = hash_password(admin_pw)
+    else:
+        admin_hash = old["admin_password_hash"]
+else:
+    admin_pw = ask("Password para la página de configuración web", secret=True)
+    if not admin_pw:
+        print("ERROR: el password no puede estar vacío.")
+        raise SystemExit(1)
+    admin_hash = hash_password(admin_pw)
 
-global_user = ask("Usuario RTSP global (default para todas las cámaras)", "")
-global_password = ask("Contraseña RTSP global (default para todas las cámaras)", "", secret=True)
+# Credenciales globales: reutilizan los valores actuales
+old_gu = (old or {}).get("global_user", "")
+old_gp = (old or {}).get("global_password", "")
+global_user = ask("Usuario RTSP global (default para todas las cámaras)", old_gu)
+gp_ask = ask("Contraseña RTSP global (vacío = conservar actual)", "", secret=True)
+global_password = gp_ask or old_gp
+
+# Cámaras: reutilizan las actuales si existen
+old_cams = (old or {}).get("cameras", [])
+n_default = str(len(old_cams)) if old_cams else "1"
+raw_n = ask("¿Cuántas cámaras vas a configurar?", n_default)
+try:
+    n_cams = max(1, int(raw_n))
+except ValueError:
+    n_cams = max(1, int(n_default))
+n_cams = min(n_cams, 4)
 
 cams = []
-while True:
-    name = ask("Nombre de la cámara", f"Camara {len(cams)+1}")
-    ip = ask("IP")
-    user = ask(f"Usuario RTSP (vacío = global '{global_user}')", "")
-    password = ask(f"Contraseña RTSP (vacío = global)", "", secret=True)
-    port = int(ask("Puerto RTSP", "554"))
-    stream = ask("Ruta del stream", "/stream1")
+for i in range(n_cams):
+    prev = old_cams[i] if i < len(old_cams) else {}
+    print(f"\n--- Cámara {i+1} ---")
+    name = ask("Nombre", prev.get("name", f"Camara {i+1}"))
+    ip = ask("IP", prev.get("ip", ""))
+    user = ask(f"Usuario RTSP (vacío = global '{global_user}')", prev.get("user", ""))
+    password = ask("Contraseña RTSP (vacío = conservar actual)", "", secret=True) or prev.get("password", "")
+    port = int(ask("Puerto RTSP", str(prev.get("port", 554))))
+    stream = ask("Ruta del stream", prev.get("stream", "/stream1"))
     if not stream.startswith("/"):
         stream = "/" + stream
-
     cams.append({
         "name": name,
         "ip": ip,
@@ -76,21 +112,15 @@ while True:
         "stream": stream
     })
 
-    if len(cams) >= 4:
-        break
-    more = ask("¿Agregar otra cámara? (s/n)", "n").lower()
-    if more not in ("s","si","sí","y","yes"):
-        break
-
-site1_layout = choose_layout("Sitio 1", "2x2" if len(cams) >= 4 else ("1x2" if len(cams)>=2 else "1x1"))
+site1_layout = choose_layout("Sitio 1", (old or {}).get("site1", {}).get("layout", "1x1"))
 site1_cams = choose_cameras("Sitio 1", cams, site1_layout)
 
-site2_layout = choose_layout("Sitio 2", "1x1")
+site2_layout = choose_layout("Sitio 2", (old or {}).get("site2", {}).get("layout", "1x1"))
 site2_cams = choose_cameras("Sitio 2", cams, site2_layout)
 
 config = {
     "port": 8765,
-    "admin_password_hash": hash_password(admin_pw),
+    "admin_password_hash": admin_hash,
     "global_user": global_user,
     "global_password": global_password,
     "cameras": cams,
