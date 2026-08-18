@@ -71,8 +71,13 @@ rtsp-viewer-multicam-v2/
 ├── setup-windows.bat
 ├── start-mac-linux.sh
 ├── start-windows.bat
+├── start-docker-windows.bat
 ├── stop-mac-linux.sh
 ├── stop-windows.bat
+├── stop-docker-windows.bat
+├── install-autostart-windows-docker.ps1    # Autostart con Docker
+├── install-autostart-windows-nodocker.ps1  # Autostart con Python
+├── uninstall-autostart-windows.ps1         # Elimina el autostart
 └── README.md
 ```
 
@@ -114,6 +119,13 @@ El proyecto incluye `Dockerfile` y `docker-compose.yml` para correrlo como conte
 git clone https://github.com/marcogll/tapo_web_viewer.git
 cd tapo_web_viewer
 docker compose up -d --build
+```
+
+**En Windows** (además de los comandos anteriores) hay scripts dedicados:
+
+```cmd
+start-docker-windows.bat   :: levanta el contenedor
+stop-docker-windows.bat    :: lo detiene
 ```
 
 Acceder desde cualquier dispositivo de la red:
@@ -379,24 +391,31 @@ loginctl enable-linger $USER
 
 ### Windows (Task Scheduler)
 
-Crear tarea programada con PowerShell:
+Hay dos instaladores PowerShell listos para usar, dependiendo del modo de ejecución:
+
+**Con Docker:**
 
 ```powershell
-$action = New-ScheduledTaskAction `
-  -Execute "cmd.exe" `
-  -Argument '/c "C:\ruta\start-windows.bat"' `
-  -WorkingDirectory "C:\ruta"
-$trigger = New-ScheduledTaskTrigger -AtLogon
-$settings = New-ScheduledTaskSettingsSet `
-  -AllowStartIfOnBatteries `
-  -DontStopIfGoingOnBatteries `
-  -ExecutionTimeLimit 0
-Register-ScheduledTask -TaskName "RTSPViewer" `
-  -Action $action -Trigger $trigger `
-  -Settings $settings -RunLevel Highest
+powershell -ExecutionPolicy Bypass -File install-autostart-windows-docker.ps1
 ```
 
-Alternativa simple: copiar un acceso directo de `start-windows.bat` a `shell:startup` (Win+R).
+Arranca Docker Desktop y levanta el contenedor (`docker compose up -d`) al iniciar sesión. El contenedor ya trae `restart: unless-stopped`, así que se mantiene corriendo aunque el contenedor se detenga. Requiere Docker Desktop instalado.
+
+**Sin Docker (Python directo):**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File install-autostart-windows-nodocker.ps1
+```
+
+Ejecuta `start-windows.bat` al iniciar sesión. Requiere Python 3 y FFmpeg en PATH.
+
+**Eliminar el arranque automático (ambos modos):**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File uninstall-autostart-windows.ps1
+```
+
+Alternativa manual: copiar un acceso directo de `start-windows.bat` a `shell:startup` (Win+R).
 
 ## Seguridad
 

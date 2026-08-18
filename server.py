@@ -161,7 +161,19 @@ def spawn_ffmpeg(idx, cam, transport):
         "-i", camera_url(cam, config),
         "-map", "0:v:0",
         "-an",
-        "-c:v", "copy",
+    ]
+    if cam.get("encode", config.get("encode", True)):
+        cmd += [
+            "-c:v", "libx264",
+            "-preset", "veryfast",
+            "-tune", "zerolatency",
+            "-crf", "26",
+            "-g", "30",
+            "-sc_threshold", "0",
+        ]
+    else:
+        cmd += ["-c:v", "copy"]
+    cmd += [
         "-avoid_negative_ts", "make_zero",
         "-muxdelay", "0",
         "-f", "hls",
