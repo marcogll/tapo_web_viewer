@@ -41,62 +41,8 @@ def hash_password(pw):
 def first_run_setup():
     print("\n=== Configuración inicial RTSP Viewer ===\n")
     print("No se encontró config/cameras.json.")
-    print("Configura las cámaras desde la página web de configuración.")
-    if os.environ.get("RTSP_VIEWER_HOST", "127.0.0.1") != "127.0.0.1" or os.environ.get("RTSP_VIEWER_NONINTERACTIVE"):
-        default_config()
-        return
-    try:
-        admin_pw = prompt("Password para acceder a la configuración web", secret=True)
-    except EOFError:
-        print("Sin terminal interactiva. Se crea configuración vacía, configúrala desde la web.")
-        default_config()
-        return
-    if not admin_pw:
-        print("ERROR: el password no puede estar vacío.")
-        sys.exit(1)
-
-    global_user = prompt("Usuario RTSP global (default para todas las cámaras)", "")
-    global_password = prompt("Contraseña RTSP global (default para todas las cámaras)", "", secret=True)
-
-    cams = []
-    while True:
-        name = prompt("Nombre de la cámara", f"Camara {len(cams)+1}")
-        ip = prompt("IP de la cámara")
-        user = prompt(f"Usuario RTSP (vacío = global '{global_user}')", "")
-        password = prompt("Contraseña RTSP (vacío = global)", "", secret=True)
-        port = prompt("Puerto RTSP", "554")
-        stream = prompt("Ruta del stream", "/stream1")
-        if not stream.startswith("/"):
-            stream = "/" + stream
-        cams.append({
-            "name": name,
-            "ip": ip,
-            "user": user,
-            "password": password,
-            "port": int(port),
-            "stream": stream
-        })
-        if len(cams) >= 4:
-            break
-        more = prompt("¿Agregar otra cámara? (s/n)", "n").lower()
-        if more not in ("s","si","sí","y","yes"):
-            break
-
-    config = {
-        "port": PORT,
-        "admin_password_hash": hash_password(admin_pw),
-        "global_user": global_user,
-        "global_password": global_password,
-        "cameras": cams,
-        "site1": {"layout": "2x2", "cameras": list(range(min(4, len(cams))))},
-        "site2": {"layout": "1x1", "cameras": [0] if cams else []}
-    }
-    CONFIG_FILE.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
-    try:
-        os.chmod(CONFIG_FILE, 0o600)
-    except Exception:
-        pass
-    print(f"\nConfiguración guardada en: {CONFIG_FILE}\n")
+    print("Se crea una configuración vacía; configura las cámaras desde la página web.")
+    default_config()
 
 def default_config():
     config = {
