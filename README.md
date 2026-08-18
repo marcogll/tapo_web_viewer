@@ -174,6 +174,16 @@ http://127.0.0.1:8765/site2.html
 stop-windows.bat
 ```
 
+### Picture-in-Picture
+
+Para mantener la cámara visible mientras trabajas en otras ventanas, usar la extensión [Picture-in-Picture Extension (by Google)](https://chromewebstore.google.com/detail/picture-in-picture-extens/hkgfoiooedgoejojocmhlaklaeopbecg?hl=en) en Chrome:
+
+1. Instalar la extensión desde Chrome Web Store
+2. Abrir cualquier sitio del visor (`site1.html` o `site2.html`)
+3. Click derecho sobre el video > "Picture in picture" o usar el botón de la extensión
+
+La ventana flotante se mantiene encima de otras aplicaciones, ideal para vigilar la entrada sin cambiar de contexto.
+
 ### Reconfigurar
 
 Ejecutar nuevamente el script de setup correspondiente.
