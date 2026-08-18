@@ -41,10 +41,12 @@ El servidor HTTP escucha únicamente en `127.0.0.1`, lo que lo hace seguro para 
 
 - Hasta 4 cámaras simultáneas con layouts 1x1, 1x2 o 2x2
 - Dos vistas independientes para multi-monitor
+- Botón Picture-in-Picture individual por cámara
+- Página de configuración web (`/config.html`) para editar cámaras sin CLI
 - Conexión RTSP con fallback automático de TCP a UDP
 - Puerto dinámico: si 8765 está ocupado, busca 8766-8784
 - Limpieza automática de procesos FFmpeg al cerrar
-- API interna `/api/config` que nunca expone credenciales al navegador
+- API interna `/api/config` para lectura y escritura de configuración
 
 ## Estructura del proyecto
 
@@ -59,6 +61,7 @@ rtsp-viewer-multicam-v2/
 ├── style.css                 # Grid y estilos del visor
 ├── site1.html                # Vista Sitio 1
 ├── site2.html                # Vista Sitio 2
+├── config.html               # Página de configuración web
 ├── setup-mac-linux.sh
 ├── setup-windows.bat
 ├── start-mac-linux.sh
@@ -176,13 +179,27 @@ stop-windows.bat
 
 ### Picture-in-Picture
 
-Para mantener la cámara visible mientras trabajas en otras ventanas, usar la extensión [Picture-in-Picture Extension (by Google)](https://chromewebstore.google.com/detail/picture-in-picture-extens/hkgfoiooedgoejojocmhlaklaeopbecg?hl=en) en Chrome:
+Cada cámara tiene un botón **PiP** en la esquina inferior derecha. Al hacer click, el video se muestra en una ventana flotante que permanece encima de otras aplicaciones.
+
+Para PiP global del navegador, usar la extensión [Picture-in-Picture Extension (by Google)](https://chromewebstore.google.com/detail/picture-in-picture-extens/hkgfoiooedgoejojocmhlaklaeopbecg?hl=en):
 
 1. Instalar la extensión desde Chrome Web Store
 2. Abrir cualquier sitio del visor (`site1.html` o `site2.html`)
 3. Click derecho sobre el video > "Picture in picture" o usar el botón de la extensión
 
 La ventana flotante se mantiene encima de otras aplicaciones, ideal para vigilar la entrada sin cambiar de contexto.
+
+### Configuración web
+
+Acceder a `http://127.0.0.1:8765/config.html` o hacer click en el botón **Config** en la esquina superior derecha de cualquier sitio.
+
+Desde esta página se pueden:
+
+- Agregar, editar y eliminar cámaras
+- Cambiar layouts de Site 1 y Site 2
+- Asignar cámaras a cada sitio
+
+Los cambios se guardan en `config/cameras.json`. Es necesario reiniciar el servidor para aplicar los cambios.
 
 ### Reconfigurar
 

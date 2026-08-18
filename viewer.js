@@ -20,8 +20,24 @@ async function init(siteKey) {
     label.className = 'label';
     label.textContent = cam.name;
 
+    const pipBtn = document.createElement('button');
+    pipBtn.className = 'pip-btn';
+    pipBtn.textContent = 'PiP';
+    pipBtn.onclick = async () => {
+      try {
+        if (document.pictureInPictureElement) {
+          await document.exitPictureInPicture();
+        } else if (video.readyState >= 2) {
+          await video.requestPictureInPicture();
+        }
+      } catch (err) {
+        console.error('PiP error:', err);
+      }
+    };
+
     tile.appendChild(video);
     tile.appendChild(label);
+    tile.appendChild(pipBtn);
     root.appendChild(tile);
 
     const stream = `/hls/cam${idx}/stream.m3u8`;

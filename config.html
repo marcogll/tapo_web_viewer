@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RTSP Viewer - Configuración</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font:14px/1.5 Arial,sans-serif;background:#1a1a1a;color:#fff;padding:20px}
+h1{margin-bottom:20px;font-size:24px}
+h2{margin:20px 0 10px;font-size:18px}
+.container{max-width:900px;margin:0 auto}
+.card{background:#2a2a2a;border-radius:8px;padding:20px;margin-bottom:20px}
+.cam-card{background:#333;border-radius:6px;padding:15px;margin-bottom:10px;position:relative}
+.cam-card .delete{position:absolute;top:10px;right:10px;background:#d33;border:none;color:#fff;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:12px}
+.cam-card .delete:hover{background:#b22}
+label{display:block;margin:8px 0 4px;font-size:12px;color:#aaa}
+input,select{width:100%;padding:8px;background:#1a1a1a;border:1px solid #444;border-radius:4px;color:#fff;font-size:14px}
+input:focus,select:focus{outline:none;border-color:#666}
+.row{display:flex;gap:10px}
+.row>*{flex:1}
+button{padding:10px 20px;background:#4a4a4a;border:none;color:#fff;border-radius:4px;cursor:pointer;font-size:14px;margin-top:10px}
+button:hover{background:#5a5a5a}
+button.primary{background:#2a6;background:#2a6}
+button.primary:hover{background:#3b7}
+.layout-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px}
+.layout-option{padding:15px;background:#1a1a1a;border:2px solid transparent;border-radius:6px;cursor:pointer;text-align:center}
+.layout-option.selected{border-color:#2a6}
+.layout-option:hover{background:#252525}
+.site-config{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.cam-select{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px}
+.cam-select label{display:flex;align-items:center;gap:5px;background:#1a1a1a;padding:5px 10px;border-radius:4px;cursor:pointer;font-size:12px}
+.cam-select input{width:auto}
+.actions{display:flex;gap:10px;margin-top:20px}
+.status{padding:10px;border-radius:4px;margin-top:10px;display:none}
+.status.success{background:#2a6;display:block}
+.status.error{background:#d33;display:block}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>Configuración RTSP Viewer</h1>
+
+<div class="card">
+<h2>Cámaras</h2>
+<div id="cameras"></div>
+<button onclick="addCamera()">+ Agregar cámara</button>
+</div>
+
+<div class="card">
+<h2>Sitio 1</h2>
+<div class="site-config">
+<div>
+<label>Layout</label>
+<div class="layout-grid" id="site1-layout">
+<div class="layout-option" data-layout="1x1" onclick="selectLayout('site1','1x1')">1x1</div>
+<div class="layout-option" data-layout="1x2" onclick="selectLayout('site1','1x2')">1x2</div>
+<div class="layout-option" data-layout="2x2" onclick="selectLayout('site1','2x2')">2x2</div>
+</div>
+</div>
+<div>
+<label>Cámaras</label>
+<div class="cam-select" id="site1-cameras"></div>
+</div>
+</div>
+</div>
+
+<div class="card">
+<h2>Sitio 2</h2>
+<div class="site-config">
+<div>
+<label>Layout</label>
+<div class="layout-grid" id="site2-layout">
+<div class="layout-option" data-layout="1x1" onclick="selectLayout('site2','1x1')">1x1</div>
+<div class="layout-option" data-layout="1x2" onclick="selectLayout('site2','1x2')">1x2</div>
+<div class="layout-option" data-layout="2x2" onclick="selectLayout('site2','2x2')">2x2</div>
+</div>
+</div>
+<div>
+<label>Cámaras</label>
+<div class="cam-select" id="site2-cameras"></div>
+</div>
+</div>
+</div>
+
+<div class="actions">
+<button class="primary" onclick="saveConfig()">Guardar configuración</button>
+<button onclick="location.reload()">Cancelar</button>
+</div>
+
+<div class="status" id="status"></div>
+</div>
+
+<script>
+let config = {cameras:[], site1:{layout:'1x1',cameras:[]}, site2:{layout:'1x1',cameras:[]}, port:8765};
+
+async function loadConfig() {
+  try {
+    const res = await fetch('/api/config');
+    const data = await res.json();
+    config.cameras = data.cameras || [];
+    config.site1 = data.site1 || {layout:'1x1',cameras:[]};
+    config.site2 = data.site2 || {layout:'1x1',cameras:[]};
+    renderCameras();
+    renderSites();
+  } catch (err) {
+    showStatus('Error al cargar configuración', 'error');
+  }
+}
+
+function renderCameras() {
+  const container = document.getElementById('cameras');
+  container.innerHTML = '';
+  config.cameras.forEach((cam, idx) => {
+    const card = document.createElement('div');
+    card.className = 'cam-card';
+    card.innerHTML = `
+      <button class="delete" onclick="deleteCamera(${idx})">Eliminar</button>
+      <div class="row">
+        <div>
+          <label>Nombre</label>
+          <input type="text" value="${cam.name||''}" onchange="updateCamera(${idx},'name',this.value)">
+        </div>
+        <div>
+          <label>IP</label>
+          <input type="text" value="${cam.ip||''}" onchange="updateCamera(${idx},'ip',this.value)">
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>Usuario RTSP</label>
+          <input type="text" value="${cam.user||''}" onchange="updateCamera(${idx},'user',this.value)">
+        </div>
+        <div>
+          <label>Contraseña RTSP</label>
+          <input type="password" value="${cam.password||''}" onchange="updateCamera(${idx},'password',this.value)">
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>Puerto RTSP</label>
+          <input type="number" value="${cam.port||554}" onchange="updateCamera(${idx},'port',parseInt(this.value))">
+        </div>
+        <div>
+          <label>Ruta del stream</label>
+          <input type="text" value="${cam.stream||'/stream1'}" onchange="updateCamera(${idx},'stream',this.value)">
+        </div>
+      </div>
+    `;
+    container.appendChild(card);
+  });
+  renderSiteCameras();
+}
+
+function renderSites() {
+  ['site1','site2'].forEach(site => {
+    const layoutEl = document.getElementById(`${site}-layout`);
+    layoutEl.querySelectorAll('.layout-option').forEach(el => {
+      el.classList.toggle('selected', el.dataset.layout === config[site].layout);
+    });
+  });
+  renderSiteCameras();
+}
+
+function renderSiteCameras() {
+  ['site1','site2'].forEach(site => {
+    const container = document.getElementById(`${site}-cameras`);
+    container.innerHTML = '';
+    config.cameras.forEach((cam, idx) => {
+      const label = document.createElement('label');
+      const checked = config[site].cameras.includes(idx) ? 'checked' : '';
+      label.innerHTML = `<input type="checkbox" ${checked} onchange="toggleSiteCamera('${site}',${idx},this.checked)"> ${cam.name||'Camara '+(idx+1)}`;
+      container.appendChild(label);
+    });
+  });
+}
+
+function addCamera() {
+  config.cameras.push({name:'Camara '+(config.cameras.length+1),ip:'',user:'',password:'',port:554,stream:'/stream1'});
+  renderCameras();
+}
+
+function deleteCamera(idx) {
+  config.cameras.splice(idx, 1);
+  ['site1','site2'].forEach(site => {
+    config[site].cameras = config[site].cameras.filter(i => i !== idx).map(i => i > idx ? i-1 : i);
+  });
+  renderCameras();
+  renderSites();
+}
+
+function updateCamera(idx, field, value) {
+  config.cameras[idx][field] = value;
+  renderSiteCameras();
+}
+
+function selectLayout(site, layout) {
+  config[site].layout = layout;
+  renderSites();
+}
+
+function toggleSiteCamera(site, idx, checked) {
+  if (checked) {
+    if (!config[site].cameras.includes(idx)) config[site].cameras.push(idx);
+  } else {
+    config[site].cameras = config[site].cameras.filter(i => i !== idx);
+  }
+}
+
+async function saveConfig() {
+  try {
+    const res = await fetch('/api/config', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(config)
+    });
+    if (res.ok) {
+      showStatus('Configuración guardada. Reinicia el servidor para aplicar cambios.', 'success');
+    } else {
+      showStatus('Error al guardar configuración', 'error');
+    }
+  } catch (err) {
+    showStatus('Error al guardar configuración', 'error');
+  }
+}
+
+function showStatus(msg, type) {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = 'status ' + type;
+  setTimeout(() => el.className = 'status', 5000);
+}
+
+loadConfig();
+</script>
+</body>
+</html>

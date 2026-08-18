@@ -171,12 +171,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/api/config":
             cfg = load_config()
-            safe = {
-                "cameras": [{"name": c["name"]} for c in cfg.get("cameras", [])],
-                "site1": cfg.get("site1", {}),
-                "site2": cfg.get("site2", {})
-            }
-            data = json.dumps(safe).encode("utf-8")
+            data = json.dumps(cfg).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(data)))
@@ -184,6 +179,25 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.wfile.write(data)
             return
         return super().do_GET()
+
+    def do_POST(self):
+        if self.path == "/api/config":
+            try:
+                length = int(self.headers.get("Content-Length", 0))
+                body = self.rfile.read(length)
+                new_cfg = json.loads(body.decode("utf-8"))
+                CONFIG_FILE.write_text(json.dumps(new_cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+                try:
+                    os.chmod(CONFIG_FILE, 0o600)
+                except Exception:
+                    pass
+                self.send_response(200)
+                self.end_headers()
+            except Exception as e:
+                self.send_response(500)
+                self.end_headers()
+            return
+        return super().do_POST()
 
 def stop_all(*_):
     try:
